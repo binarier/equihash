@@ -287,7 +287,7 @@ struct htalloc {
 
 // main solver object, shared between all threads
 struct equi {
-  blake2b_state blake_ctx; // holds blake2b midstate after call to setheadernounce
+  crypto_generichash_blake2b_state blake_ctx; // holds blake2b midstate after call to setheadernounce
   htalloc hta;             // holds allocated heaps
   bsizes *nslots;          // counts number of slots used in buckets
   proof *sols;             // store found solutions here (only first MAXSOLS)
@@ -570,17 +570,17 @@ static const u32 NBLOCKS = (NHASHES+HASHESPERBLOCK-1)/HASHESPERBLOCK;
     htlayout htl(this, 0);
     const u32 hashbytes = hashsize(0);
     uchar hashes[NBLAKES * 64];
-    blake2b_state state0 = blake_ctx;  // local copy on stack can be copied faster
+    crypto_generichash_blake2b_state state0 = blake_ctx;  // local copy on stack can be copied faster
     for (u32 block = id; block < NBLOCKS; block += nthreads) {
 #if NBLAKES == 4
       blake2bx4_final(&state0, hashes, block);
 #elif NBLAKES == 8
       blake2bx8_final(&state0, hashes, block);
 #elif NBLAKES == 1
-      blake2b_state state = state0;  // make another copy since blake2b_final modifies it
+      crypto_generichash_blake2b_state state = state0;  // make another copy since crypto_generichash_blake2b_final modifies it
       u32 leb = htole32(block);
-      blake2b_update(&state, (uchar *)&leb, sizeof(u32));
-      blake2b_final(&state, hashes, HASHOUT);
+      crypto_generichash_blake2b_update(&state, (uchar *)&leb, sizeof(u32));
+      crypto_generichash_blake2b_final(&state, hashes, HASHOUT);
 #else
 #error not implemented
 #endif

@@ -70,7 +70,7 @@ struct blake_state {
   alignas(32) uchar state[256];
 };
 #else
-typedef blake2b_state blake_state;
+typedef crypto_generichash_blake2b_state blake_state;
 #endif
 
 #if defined __builtin_bswap32 && defined __LITTLE_ENDIAN
@@ -305,6 +305,11 @@ struct htalloc {
     heap0 = (bucket0 *)alloc(NBUCKETS, sizeof(bucket0));
     heap1 = (bucket1 *)alloc(NBUCKETS, sizeof(bucket1));
   }
+void copy(htalloc *other)
+{
+  memcpy(heap0, other->heap0, NBUCKETS * sizeof(bucket0));
+  memcpy(heap1, other->heap1, NBUCKETS * sizeof(bucket1));
+}
   void dealloctrees() {
     free(heap0);
     free(heap1);
@@ -319,6 +324,7 @@ struct htalloc {
 
 // main solver object, shared between all threads
 struct equi {
+int first=1;
   blake_state blake_ctx; // holds blake2b midstate after call to setheadernounce
   htalloc hta;             // holds allocated heaps
   bsizes *nslots;          // counts number of slots used in buckets
@@ -620,10 +626,10 @@ static const u32 NBLOCKS = (NHASHES+HASHESPERBLOCK-1)/HASHESPERBLOCK;
 #elif NBLAKES == 8
       blake2bx8_final(&state0, hashes, block);
 #elif NBLAKES == 1
-      blake_state state = state0;  // make another copy since blake2b_final modifies it
+      blake_state state = state0;  // make another copy since crypto_generichash_blake2b_final modifies it
       u32 leb = htole32(block);
-      blake2b_update(&state, (uchar *)&leb, sizeof(u32));
-      blake2b_final(&state, hashes, HASHOUT);
+      crypto_generichash_blake2b_update(&state, (uchar *)&leb, sizeof(u32));
+      crypto_generichash_blake2b_final(&state, hashes, HASHOUT);
 #else
 #error not implemented
 #endif
@@ -1061,6 +1067,7 @@ typedef struct {
   u32 id;
   pthread_t thread;
   equi *eq;
+  equi *ref;
 } thread_ctx;
 
 void barrier(pthread_barrier_t *barry) {
@@ -1070,15 +1077,32 @@ void barrier(pthread_barrier_t *barry) {
     pthread_exit(NULL);
   }
 }
-
+static htalloc buf;
+static bsizes *sl;
 // do all rounds for each thread
 void *worker(void *vp) {
   thread_ctx *tp = (thread_ctx *)vp;
   equi *eq = tp->eq;
 
   if (tp->id == 0) printf("Digit 0");
+if (eq->first)
+{
   eq->digit0(tp->id);
+} else if (tp->id == 0)
+{
+//restore
+  eq->hta.copy(&buf);
+  memcpy(eq->nslots, sl, 2 * NBUCKETS * sizeof(au32));
+}
   barrier(&eq->barry);
+if (eq->first && tp->id == 0)
+{
+//backup
+  buf.alloctrees();
+  sl = (bsizes *)buf.alloc(2 * NBUCKETS, sizeof(au32));
+  buf.copy(&eq->hta);
+  memcpy(sl, eq->nslots, 2 * NBUCKETS * sizeof(au32));
+}
   if (tp->id == 0) eq->showbsizes(0);
   barrier(&eq->barry);
 #if WN == 200 && WK == 9 && RESTBITS == 10

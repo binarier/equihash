@@ -1,6 +1,6 @@
 // Wagner's algorithm for Generalized Birthday Paradox, a memory-hard proof-of-work
 // Copyright (c) 2016 John Tromp
-
+#include <sodium.h>
 #include "equi_miner.h"
 #include <unistd.h>
 #include "ctype.h"
@@ -16,7 +16,7 @@ int hextobyte(const char * x) {
 }
 
 int main(int argc, char **argv) {
-  int nthreads = 1;
+  int nthreads = 4;
   int nonce = 0;
   int range = 1;
   bool showsol = false;
@@ -61,12 +61,31 @@ int main(int argc, char **argv) {
   printf(") with %d %d-bit digits and %d threads\n", NDIGITS, DIGITBITS, nthreads);
   thread_ctx *threads = (thread_ctx *)calloc(nthreads, sizeof(thread_ctx));
   assert(threads);
+//===========
+/*
+  equi ref(1);
+{
+    char headernonce[HEADERNONCELEN];
+  u32 hdrlen = strlen(header);
+  if (*hex) {
+    assert(strlen(hex) == 2 * HEADERNONCELEN);
+    for (int i = 0; i < HEADERNONCELEN; i++)
+      headernonce[i] = hextobyte(&hex[2*i]);
+  } else {
+    memcpy(headernonce, header, hdrlen);
+    memset(headernonce+hdrlen, 0, sizeof(headernonce)-hdrlen);
+  }
+    ((u32 *)headernonce)[32] = htole32(nonce);
+    ref.setheadernonce(headernonce, sizeof(headernonce));
+    ref.digit0(0);
+printf("====ref====\n");
+}
+*/
+
+//=================
+  u32 sumnsols = 0;
   equi eq(nthreads);
   printf("Using %dMB of memory and %d-way blake2b\n", 1 + eq.hta.alloced / 0x100000, NBLAKES);
-#ifdef ASM_BLAKE
-  printf("Using xenoncat's assembly blake code\n");
-#endif
-  u32 sumnsols = 0;
   char headernonce[HEADERNONCELEN];
   u32 hdrlen = strlen(header);
   if (*hex) {
@@ -77,12 +96,15 @@ int main(int argc, char **argv) {
     memcpy(headernonce, header, hdrlen);
     memset(headernonce+hdrlen, 0, sizeof(headernonce)-hdrlen);
   }
+time_t start, end;
   for (int r = 0; r < range; r++) {
-    ((u32 *)headernonce)[32] = htole32(nonce+r);
+    //((u32 *)headernonce)[32] = htole32(nonce+r);
+    ((u32 *)headernonce)[32] = htole32(nonce+0);
     eq.setheadernonce(headernonce, sizeof(headernonce));
     for (int t = 0; t < nthreads; t++) {
       threads[t].id = t;
       threads[t].eq = &eq;
+  //    threads[t].ref = &ref;
       int err = pthread_create(&threads[t].thread, NULL, worker, (void *)&threads[t]);
       assert(err == 0);
     }
@@ -100,8 +122,13 @@ int main(int argc, char **argv) {
     }
     printf("\n%d solutions\n", nsols);
     sumnsols += nsols;
+if (eq.first)
+start=time(NULL);
+    eq.first=0;
   }
+end=time(NULL);
   free(threads);
   printf("%d total solutions\n", sumnsols);
+printf("start:%ld, end:%ld, duration:%ld, %lfSol/s\n", start, end, end - start,  (double)(sumnsols-2)/(end-start));
   return 0;
 }

@@ -1,11 +1,11 @@
-OPT   = -O3
-FLAGS = -Wall -Wno-deprecated-declarations -D_POSIX_C_SOURCE=200112L $(OPT) -pthread 
-GPP   = g++ -march=native -m64 -std=c++11 $(FLAGS)
+OPT   = -O0
+FLAGS = -Wall -Wno-deprecated-declarations -D_POSIX_C_SOURCE=200112L $(OPT) -pthread -g
+GPP   = g++ -march=native -std=c++11 $(FLAGS)
 
 all:	equi equi1 verify test spark test1445
 
 equi:	equi.h equi_miner.h equi_miner.cpp Makefile
-	$(GPP) -DATOMIC equi_miner.cpp blake/blake2b.cpp -o equi
+	$(GPP) -I /home/ubuntu/zcash/depends/aarch64-linux-gnu/include -DATOMIC equi_miner.cpp /home/ubuntu/zcash/depends/aarch64-linux-gnu/lib/libsodium.a -o equi
 
 equi1:	equi.h equi_miner.h equi_miner.cpp Makefile
 	$(GPP) equi_miner.cpp blake/blake2b.cpp -o equi1
